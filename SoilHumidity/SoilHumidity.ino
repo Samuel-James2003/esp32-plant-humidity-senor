@@ -8,6 +8,16 @@ const char *HumidityTopic = "home/ESP32/Humidity";
 const char *ControlTopic = "home/ESP32/Control";
 const int mqtt_port = 1883;
 
+// Pins
+#define HUMIDITY_PIN 25 
+
+// Intervals
+const int AirValue = 3100;   // 3100 represents bone dry
+const int WaterValue = 1420; // 1420 represents soaking wet
+int intervals = (AirValue - WaterValue) / 3;
+
+
+
 WiFiClient espClient;
 PubSubClient client(espClient);
 
