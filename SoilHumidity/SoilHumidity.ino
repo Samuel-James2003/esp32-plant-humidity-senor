@@ -68,5 +68,17 @@ void loop() {
   client.loop();
 }
 
-
+String getMoistureLevel() {
+  int WaterValue = analogRead(HUMIDITY_PIN);
+  if (value > WaterValue && value < (WaterValue + intervals)) {
+    return "Very Wet";
+  } else if (value >= (WaterValue + intervals) && value < (AirValue - intervals)) {
+    return "Wet";
+  } else if (value < AirValue && value >= (AirValue - intervals)) {
+    return "Dry";
+  } else if (value >= AirValue) {
+    return "Very Dry";
+  }
+  return "Unknown"; // In case value does not fit any range
+}
 
