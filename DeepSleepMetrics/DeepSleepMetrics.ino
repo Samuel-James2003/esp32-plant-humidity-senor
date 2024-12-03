@@ -16,7 +16,8 @@ const int WaterValue = 1420;
 int intervals = (AirValue - WaterValue) / 3;
 
 // Sleep duration (in microseconds)
-const uint64_t SLEEP_DURATION = 3.6e9;  // 10 seconds
+//const uint64_t SLEEP_DURATION = 10e6;  // 10 seconds
+const uint64_t SLEEP_DURATION = 3.6e9;  // 1 hour
 
 WiFiClient espClient;
 PubSubClient client(espClient);
