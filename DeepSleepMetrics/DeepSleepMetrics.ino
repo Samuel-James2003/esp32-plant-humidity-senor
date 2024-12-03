@@ -58,19 +58,17 @@ void connectToMQTT() {
 }
 
 // Function to read the moisture level
-String getMoistureLevel() {
+String getMoistureLevel() 
+{
   int value = analogRead(HUMIDITY_PIN);
-  if (value > WaterValue && value < (WaterValue + intervals)) {
-    return "Very Wet";
-  } else if (value >= (WaterValue + intervals) && value < (AirValue - intervals)) {
-    return "Wet";
-  } else if (value < AirValue && value >= (AirValue - intervals)) {
-    return "Dry";
-  } else if (value >= AirValue) {
-    return "Very Dry";
-  }
-  return "Unknown";
+  if (value < WaterValue)
+    return "0";
+  else if (value > AirValue)
+    return String(AirValue - WaterValue);
+
+  return String(value - WaterValue);
 }
+
 
 void setup() {
   Serial.begin(115200);
