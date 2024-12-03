@@ -5,12 +5,13 @@ import os
 app = Flask(__name__)
 
 # MQTT status
-mqtt_status = {"status": "Unknown"}
+mqtt_status = {"topic": "Unknown", "status": "Unknown"}
 
 # Callback for MQTT messages
 def on_message(client, userdata, message):
     global mqtt_status
-    mqtt_status["status"] = message.payload.decode()
+    mqtt_status["topic"] = message.topic  # Store the topic
+    mqtt_status["status"] = message.payload.decode()  # Store the payload
 
 # MQTT client setup
 client = mqtt.Client()
