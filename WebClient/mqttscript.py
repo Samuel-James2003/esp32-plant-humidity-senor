@@ -1,17 +1,19 @@
 from flask import Flask, jsonify, render_template
 import paho.mqtt.client as mqtt
 import os
+from datetime import datetime  # Import for timestamp
 
 app = Flask(__name__)
 
 # MQTT status
-mqtt_status = {"topic": "Unknown", "status": "Unknown"}
+mqtt_status = {"topic": "Unknown", "status": "Unknown", "timestamp": "Unknown"}
 
 # Callback for MQTT messages
 def on_message(client, userdata, message):
     global mqtt_status
     mqtt_status["topic"] = message.topic  # Store the topic
     mqtt_status["status"] = message.payload.decode()  # Store the payload
+    mqtt_status["timestamp"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")  # Store the timestamp
 
 # MQTT client setup
 client = mqtt.Client()

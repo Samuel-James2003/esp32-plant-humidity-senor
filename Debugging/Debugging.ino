@@ -8,12 +8,13 @@ const char* HumidityTopic = "home/ESP32/Humidity";
 const int mqtt_port = 1883;
 
 // Humidity sensor pin
-#define HUMIDITY_PIN 25
+#define WIFI_PIN 13
+#define MQTT_PIN 12
+#define POWER_PIN 11  
+// #define WIFI_PIN 27
+// #define MQTT_PIN 25
+// #define POWER_PIN 32
 
-// ADC calibration values
-const int AirValue = 3100;
-const int WaterValue = 1420;
-int intervals = (AirValue - WaterValue) / 3;
 
 // Sleep duration (in microseconds)
 const uint64_t SHORT_SLEEP_DURATION = 10e6; // 10 seconds
@@ -31,6 +32,7 @@ void connectToWiFi() {
     Serial.print(".");
   }
   Serial.println("\nConnected to WiFi.");
+  digitalWrite(WIFI_PIN,HIGH);
 }
 
 // Function to connect to MQTT broker
@@ -55,24 +57,17 @@ void connectToMQTT() {
       delay(2000);
     }
   }
+  digitalWrite(MQTT_PIN, HIGH);
 }
 
-// Function to read the moisture level
-String getMoistureLevel() {
-  int value = analogRead(HUMIDITY_PIN);
-  if (value < WaterValue)
-    return "0";
-  else if (value > AirValue)
-    return String(AirValue - WaterValue);
-
-  return String(value - WaterValue);
-}
 
 
 void setup() {
   Serial.begin(115200);
-  pinMode(HUMIDITY_PIN, INPUT);
-  String moistureLevel = getMoistureLevel();
+  pinMode(WIFI_PIN, OUTPUT);
+  pinMode(MQTT_PIN, OUTPUT);
+  pinMode(POWER_PIN, OUTPUT);
+  digitalWrite(POWER_PIN,HIGH);
 
 
   connectToWiFi();
@@ -83,14 +78,12 @@ void setup() {
     // If the ESP32 is booting up (not waking from deep sleep)
     Serial.println("Setting status to online...");
     Publish(StatusTopic, "esp32-client-online");
-    GoSleep(SHORT_SLEEP_DURATION);
   }
-  Serial.println("Moisture Level: " + moistureLevel);
   delay(10);
-  Publish(HumidityTopic, moistureLevel.c_str());
+  Publish(HumidityTopic, "Testing");
   delay(10);
 
-  GoSleep(LONG_SLEEP_DURATION);
+  GoSleep(SHORT_SLEEP_DURATION);
 }
 //Put the esp32 in sleep mode
 void GoSleep(uint64_t SLEEP_DURATION) {

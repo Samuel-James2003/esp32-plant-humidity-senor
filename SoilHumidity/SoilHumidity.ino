@@ -16,18 +16,16 @@ const int WaterValue = 1420;
 
 // Sleep duration (in microseconds)
 // const uint64_t SLEEP_DURATION = 3.6e9;  // 1 hour
-const uint64_t SLEEP_DURATION = 10e6; // 10 seconds
+const uint64_t SLEEP_DURATION = 10e6;  // 10 seconds
 
 WiFiClient espClient;
 PubSubClient client(espClient);
 
 // Function to connect to WiFi
-void connectToWiFi()
-{
+void connectToWiFi() {
   Serial.println("Connecting to WiFi...");
   WiFi.begin(ssid, password);
-  while (WiFi.status() != WL_CONNECTED)
-  {
+  while (WiFi.status() != WL_CONNECTED) {
     delay(500);
     Serial.print(".");
   }
@@ -35,41 +33,35 @@ void connectToWiFi()
 }
 
 // Function to connect to MQTT broker
-void connectToMQTT()
-{
+void connectToMQTT() {
   byte maxAttempts = 0;
   client.setServer(mqtt_broker, mqtt_port);
-  while (!client.connected())
-  {
-    Serial.println("Connecting to MQTT...");
-    if (client.connect("ESP32Client", mqtt_username, mqtt_password))
-    {
-      Serial.println("Connected to MQTT broker.");
+  while (!client.connected()) {
+    if (WiFi.status() != WL_CONNECTED) {
+      connectToWiFi();
     }
-    else if (maxAttempts > 10)
-    {
+    Serial.println("Connecting to MQTT...");
+    if (client.connect("ESP32Client", mqtt_username, mqtt_password)) {
+      Serial.println("Connected to MQTT broker.");
+      return;
+    } else if (maxAttempts > 10) {
       Serial.println("Max tries reached");
       GoSleep();
-    }
-    else if (client.state() == -2)
-    {
+    } else if (client.state() == -2) {
       maxAttempts++;
       Serial.println("State -2");
       delay(10);
-    }
-    else
-    {
+    } else {
       maxAttempts++;
       Serial.print("Failed to connect, state: ");
       Serial.println(client.state());
-      delay(2000);
+      delay(200);
     }
   }
 }
 
 // Function to read the moisture level
-String getMoistureLevel()
-{
+String getMoistureLevel() {
   int value = analogRead(HUMIDITY_PIN);
   if (value < WaterValue)
     return "0";
@@ -80,16 +72,14 @@ String getMoistureLevel()
 }
 
 // Put the esp32 in sleep mode
-void GoSleep()
-{
+void GoSleep() {
   delay(10e3);
   ESP.restart();
   Serial.println("Going to sleep...");
 }
 
 // Generic MQTT publish function with delay to ensure upload
-void Publish(String topic, const char *payload)
-{
+void Publish(String topic, const char *payload) {
   // Append the MAC address to the topic
   topic += "/";
   topic += WiFi.macAddress();
@@ -100,8 +90,7 @@ void Publish(String topic, const char *payload)
   delay(10);
 }
 
-void setup()
-{
+void setup() {
   Serial.begin(115200);
   pinMode(HUMIDITY_PIN, INPUT);
   String moistureLevel = getMoistureLevel();
@@ -110,14 +99,11 @@ void setup()
   connectToMQTT();
 
   // Check the reset reason to determine if this is the first setup
-  if (esp_reset_reason() == ESP_RST_POWERON)
-  {
-    // If the ESP32 is booting up (not waking from deep sleep)
+  if (esp_reset_reason() == ESP_RST_POWERON) {
+    // If the ESP32 is booting up the first time
     Serial.println("Setting status to online...");
     Publish(StatusTopic, "esp32-client-online");
-  }
-  else
-  {
+  } else {
     // If waking up from deep sleep, read and publish the sensor value
     Serial.println("Moisture Level: " + moistureLevel);
     delay(10);
@@ -127,7 +113,4 @@ void setup()
   GoSleep();
 }
 
-void loop()
-{
-  // Nothing needed in the loop since we're using deep sleep
-}
+void loop() {}
