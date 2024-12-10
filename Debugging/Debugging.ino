@@ -3,8 +3,8 @@
 #include <PubSubClient.h>
 
 // MQTT Broker
-const char* StatusTopic = "home/ESP32/Status";
-const char* HumidityTopic = "home/ESP32/Humidity";
+const char* StatusTopic = "debug/ESP32/Status";
+const char* HumidityTopic = "debug/ESP32/Humidity";
 const int mqtt_port = 1883;
 
 // Humidity sensor pin
