@@ -8,7 +8,7 @@ const char* HumidityTopic = "home/ESP32/Humidity";
 const int mqtt_port = 1883;
 
 // Humidity sensor pin
-#define HUMIDITY_PIN 25
+#define HUMIDITY_PIN 13
 
 // ADC calibration values
 const int AirValue = 3100;
