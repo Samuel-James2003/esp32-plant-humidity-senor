@@ -1,3 +1,5 @@
+.vscode
+.theia
 startServer.ps1
 # Prerequisites
 *.d
