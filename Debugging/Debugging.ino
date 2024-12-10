@@ -8,12 +8,12 @@ const char* HumidityTopic = "debug/ESP32/Humidity";
 const int mqtt_port = 1883;
 
 // Humidity sensor pin
-#define WIFI_PIN 13
-#define MQTT_PIN 12
-#define POWER_PIN 11  
-// #define WIFI_PIN 27
-// #define MQTT_PIN 25
-// #define POWER_PIN 32
+// #define WIFI_PIN 13
+// #define MQTT_PIN 12
+//#define POWER_PIN 11  
+#define WIFI_PIN 27
+#define MQTT_PIN 25
+#define POWER_PIN 32
 
 
 // Sleep duration (in microseconds)
@@ -26,10 +26,16 @@ PubSubClient client(espClient);
 // Function to connect to WiFi
 void connectToWiFi() {
   Serial.println("Connecting to WiFi...");
+  byte maxAttempts = 0;
   WiFi.begin(ssid, password);
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
     Serial.print(".");
+    maxAttempts++;
+    if (maxAttempts > 50) {
+      Serial.println("Max wifi tries reached");
+      GoSleep(SHORT_SLEEP_DURATION);
+    }
   }
   Serial.println("\nConnected to WiFi.");
   digitalWrite(WIFI_PIN,HIGH);
