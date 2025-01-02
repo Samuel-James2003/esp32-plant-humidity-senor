@@ -34,3 +34,4 @@ startServer.ps1
 
 # Config
 config.h
+/DeepSleepMetrics/.theia

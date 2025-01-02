@@ -8,9 +8,11 @@ const char* HumidityTopic = "debug/ESP32/Humidity";
 const int mqtt_port = 1883;
 
 // Humidity sensor pin
-#define WIFI_PIN 13
+#define POWER_PIN 11
 #define MQTT_PIN 12
-#define POWER_PIN 11  
+#define HUMIDITY_PIN 13
+#define WIFI_PIN 10
+#define HUMIDITY_OUT_PIN 9
 // #define WIFI_PIN 27
 // #define MQTT_PIN 25
 // #define POWER_PIN 32
@@ -60,10 +62,21 @@ void connectToMQTT() {
   digitalWrite(MQTT_PIN, HIGH);
 }
 
+String getMoistureLevel() {
+  int value = analogRead(HUMIDITY_PIN);
+  if (value < WaterValue)
+    return "0";
+  else if (value > AirValue)
+    return String(AirValue - WaterValue);
+
+  return String(value - WaterValue);
+}
 
 
 void setup() {
   Serial.begin(115200);
+    pinMode(HUMIDITY_PIN, INPUT);
+  String moistureLevel = getMoistureLevel();
   pinMode(WIFI_PIN, OUTPUT);
   pinMode(MQTT_PIN, OUTPUT);
   pinMode(POWER_PIN, OUTPUT);
