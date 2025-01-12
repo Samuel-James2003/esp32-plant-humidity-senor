@@ -100,7 +100,12 @@ int getMoistureLevel() {
 
 void setup() {
   Serial.begin(115200);
-    
+      esp_task_wdt_config_t wdt_config = {
+      .timeout_ms = 12e6,  // Timeout in milliseconds (120 seconds)
+      .trigger_panic = true};// Trigger a panic (reset) on timeout
+    // Initialize the watchdog timer
+  esp_task_wdt_init(&wdt_config);
+  esp_task_wdt_add(NULL);       
   pinMode(HUMIDITY_PIN, INPUT);
   int moistureLevel = getMoistureLevel();
 
