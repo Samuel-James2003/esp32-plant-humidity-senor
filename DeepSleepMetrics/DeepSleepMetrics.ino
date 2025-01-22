@@ -89,13 +89,22 @@ int getMoistureLevel() {
   const int WaterValue = 1420;
   int intervals = (AirValue - WaterValue) / 3;
 
-  int value = analogRead(HUMIDITY_PIN);
-  if (value < WaterValue)
+  int totalValue = 0;
+  const int numReadings = 10;
+
+  for (int i = 0; i < numReadings; i++) {
+    totalValue += analogRead(HUMIDITY_PIN);
+    delay(10); // Small delay between readings
+  }
+
+  int averageValue = totalValue / numReadings;
+
+  if (averageValue < WaterValue)
     return 0;
-  else if (value > AirValue)
+  else if (averageValue > AirValue)
     return AirValue - WaterValue;
 
-  return value - WaterValue;
+  return averageValue - WaterValue;
 }
 
 
