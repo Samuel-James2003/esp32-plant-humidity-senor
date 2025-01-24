@@ -26,6 +26,7 @@ long min(long a, long b) {
 
 // Function to connect to WiFi
 void connectToWiFi() {
+  // esp_task_wdt_reset();
   WiFi.disconnect();
   WiFi.begin(ssid, password);
   byte retryCount = 0;               // Retry counter stored locally
@@ -51,14 +52,21 @@ void connectToWiFi() {
 
 // Function to connect to MQTT broker
 void connectToMQTT() {
+  //  esp_task_wdt_reset();
   client.disconnect();
   client.setServer(mqtt_broker, mqtt_port);
   byte retryCount = 0;               // Retry counter stored locally
   unsigned long delayDuration = 10;  // Initial delay duration in milliseconds
 
   while (!client.connected()) {
+    Serial.print("Attempting MQTT connection... ");
     if (client.connect("ESP32Client", mqtt_username, mqtt_password)) {
+      Serial.println("connected");
       return;
+    } else {
+      Serial.print("failed, rc=");
+      Serial.print(client.state());
+      Serial.println(" try again in " + String(delayDuration) + " milliseconds");
     }
 
     // Increment the retry count
@@ -66,6 +74,7 @@ void connectToMQTT() {
 
     // If max retries reached, go to sleep
     if (retryCount > MAX_ATTEMPTS) {
+      Serial.println("Max attempts reached, going to sleep");
       GoSleep(SHORT_SLEEP_DURATION);
       return;
     }
@@ -88,22 +97,28 @@ int getBatteryLevel() {
 
   for (int i = 0; i < numReadings; i++) {
     totalValue += analogRead(BATTERY_PIN);
-    delay(10); // Small delay between readings
+    delay(10);  // Small delay between readings
   }
-  return totalValue / numReadings;
+  int percentage = map(totalValue / numReadings, 0, 3500, 0, 100);
+  return constrain(percentage, 0, 100);
 }
 
 void setup() {
   Serial.begin(115200);
+  // // Initialize the Task Watchdog Timer if not already initialized
+  // esp_task_wdt_config_t wdt_config = {
+  //   .timeout_ms = 300000,  // Set timeout to 5 mins
+  //   .trigger_panic = true  // Trigger panic on timeout
+  // };
+  // esp_task_wdt_init(&wdt_config);
+
+  // esp_err_t status = esp_task_wdt_status(NULL);  // NULL refers to the current task
+  // if (status == ESP_ERR_NOT_FOUND) {
+  //   // Add the current task to the TWDT
+  //   esp_err_t add_status = esp_task_wdt_add(NULL);
+  // }
+
   Serial.println("Starting setup...");
-  uint32_t timeout = 24e6;
-  esp_task_wdt_config_t wdt_config = {
-    .timeout_ms = timeout,     // Timeout in milliseconds (240 seconds)
-    .trigger_panic = true,  // Trigger a panic (reset) on timeout
-  };
-  // Initialize the watchdog timer
-  esp_task_wdt_init(&wdt_config);
-  esp_task_wdt_add(NULL);
   pinMode(BATTERY_PIN, INPUT);
   int batteryLevel = getBatteryLevel();
   Serial.print("Battery level: ");
