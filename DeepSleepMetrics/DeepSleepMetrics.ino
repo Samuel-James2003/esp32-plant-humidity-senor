@@ -13,8 +13,9 @@ const int mqtt_port = 1883;
 
 
 // Sleep duration (in microseconds)
-const uint64_t SHORT_SLEEP_DURATION = 10e6;  // 10 seconds
+const uint64_t SHORT_SLEEP_DURATION = 60e6;  // 1 minute
 const uint64_t LONG_SLEEP_DURATION = 36e8;   // 1 hour
+const int MAX_ATTEMPTS = 20;
 
 WiFiClient espClient;
 PubSubClient client(espClient);
@@ -40,7 +41,7 @@ void connectToWiFi() {
     delayDuration = min(delayDuration * 2, 4000); // Cap the delay at 4000ms
 
     // Check if max retries are reached
-    if (retryCount > 50) {
+    if (retryCount > MAX_ATTEMPTS) {
       GoSleep(SHORT_SLEEP_DURATION);
       return;
     }
@@ -64,7 +65,7 @@ void connectToMQTT() {
     retryCount++;
 
     // If max retries reached, go to sleep
-    if (retryCount > 50) {
+    if (retryCount > MAX_ATTEMPTS) {
       GoSleep(SHORT_SLEEP_DURATION);
       return;
     }
@@ -88,22 +89,36 @@ int getMoistureLevel() {
   const int WaterValue = 1420;
   int intervals = (AirValue - WaterValue) / 3;
 
-  int value = analogRead(HUMIDITY_PIN);
-  if (value < WaterValue)
+  int totalValue = 0;
+  const int numReadings = 10;
+
+  for (int i = 0; i < numReadings; i++) {
+    totalValue += analogRead(HUMIDITY_PIN);
+    delay(10); // Small delay between readings
+  }
+
+  int averageValue = totalValue / numReadings;
+
+  if (averageValue < WaterValue)
     return 0;
-  else if (value > AirValue)
+  else if (averageValue > AirValue)
     return AirValue - WaterValue;
 
-  return value - WaterValue;
+  return averageValue - WaterValue;
 }
 
 
 void setup() {
   Serial.begin(115200);
-    
+  esp_task_wdt_config_t wdt_config = {
+    .timeout_ms = 24e6,     // Timeout in milliseconds (240 seconds)
+    .trigger_panic = true,  // Trigger a panic (reset) on timeout
+    };
+  // Initialize the watchdog timer
+  esp_task_wdt_init(&wdt_config);
+  esp_task_wdt_add(NULL);       
   pinMode(HUMIDITY_PIN, INPUT);
   int moistureLevel = getMoistureLevel();
-
 
   connectToWiFi();
   connectToMQTT();
