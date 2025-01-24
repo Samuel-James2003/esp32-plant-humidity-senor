@@ -36,3 +36,6 @@ startServer.ps1
 
 # Config
 config.h
+/DeepSleepMetrics/.theia
+SuperMini/Debugging/.theia/settings.json
+SuperMini/DeepSleepMetrics/.theia/settings.json
