@@ -99,7 +99,16 @@ int getBatteryLevel() {
     totalValue += analogRead(BATTERY_PIN);
     delay(10);  // Small delay between readings
   }
-  int percentage = map(totalValue / numReadings, 0, 3500, 0, 100);
+  // Calculate the average ADC value
+  int averageValue = totalValue / numReadings;
+
+  // Map the ADC value to the desired voltage range (assuming a 12-bit ADC resolution)
+  float voltage = (averageValue / 4095.0) * 3300;  // Convert ADC value to millivolts (assuming 3.3V reference)
+
+  // Scale voltage to a percentage between 3000mV and 1500mV
+  int percentage = map(voltage, 1500, 3000, 0, 100);
+
+  // Constrain the result between 0% and 100%
   return constrain(percentage, 0, 100);
 }
 
