@@ -3,6 +3,7 @@
 #include <ArduinoJson.h>
 #include <WiFi.h>
 #include <PubSubClient.h>
+#include "SPIFFS.h"
 #include <time.h>
 
 // MQTT Information
@@ -27,11 +28,11 @@ struct SensorData {
 #define DHTTYPE DHT22
 #define TIMEZONE "EST5EDT,M3.2.0,M11.1.0"
 #define COMPLETED true
+#define FAILED false
 
 // Sleep duration (in microseconds)
-const uint64_t SHORT_SLEEP_DURATION = 60e6;  // 1 minute
-const uint64_t LONG_SLEEP_DURATION = 36e8;   // 1 hour
-const int MAX_ATTEMPTS = 20;
+const uint64_t SLEEP_DURATION = 36e8;   // 1 hour
+const int MAX_ATTEMPTS = 50;
 const int MAX_DELAY = 2000;
 
 WiFiClient espClient;
@@ -59,7 +60,7 @@ void connectToWiFi() {
 
     // Check if max retries are reached
     if (retryCount > MAX_ATTEMPTS) {
-      GoSleep(SHORT_SLEEP_DURATION);
+      GoSleep(FAILED);
       return;
     }
   }
@@ -82,7 +83,7 @@ void connectToMQTT() {
 
     // If max retries reached, go to sleep
     if (retryCount > MAX_ATTEMPTS) {
-      GoSleep(SHORT_SLEEP_DURATION);
+      GoSleep(FAILED);
       return;
     }
 
@@ -160,22 +161,78 @@ void structToJson(const SensorData& data, JsonDocument& doc) {
   doc["timestamp"] = data.timestamp;
   doc["heat_index"] = data.heat_index;
 }
-//Put the esp32 in sleep mode
-void GoSleep(uint64_t SLEEP_DURATION) {
-  esp_sleep_enable_timer_wakeup(SLEEP_DURATION);  // Set the wake-up timer
-  esp_deep_sleep_start();                         // Enter deep sleep
+
+void resendStoredData() {
+  if (!client.connected()) return;
+
+  File file = SPIFFS.open("/sensor_data.json", "r");
+  if (!file) {
+    Serial.println("No stored data found");
+    return;
+  }
+
+  while (file.available()) {
+    String line = file.readStringUntil('\n');
+    line.trim();
+    // Publish the line as a JSON string
+    if (!Publish(SensorTopic, line.c_str())) break;
+  }
+  file.close();
+
+  // Clear the file after successful transmission
+  SPIFFS.remove("/sensor_data.json");
 }
+
+void saveDataToFile(String jsonData) {
+  // Open the file for appending data
+  File file = SPIFFS.open("/sensor_data.json", "a");  // Open in append mode
+  if (!file) {
+    return;
+  }
+
+  // Write JSON data to file
+  file.println(jsonData);
+  file.close();
+
+  Serial.println("Data saved to SPIFFS");
+}
+
+//Put the esp32 in sleep mode
+void GoSleep(bool isComplete) {
+  if (isComplete) {
+    esp_sleep_enable_timer_wakeup(SLEEP_DURATION);  // Set the wake-up timer
+    esp_deep_sleep_start();                         // Enter deep sleep
+    return;
+  }
+  SensorData data;
+  getBatteryLevel(data);
+  getDHTLevels(data);
+  getMoistureLevel(data);
+  getTime(data);
+
+  // Create a JSON document
+  StaticJsonDocument<200> doc;
+
+  // Convert struct to JSON
+  structToJson(data, doc);
+  String jsonString;
+  serializeJson(doc, jsonString);
+  saveDataToFile(jsonString);
+}
+
 //Generic MQTT publish function with delay to ensure upload
-void Publish(String topic, const char* payload) {
+bool Publish(String topic, const char* payload) {
   // Append the MAC address to the topic
   topic += "/";
   topic += WiFi.macAddress();
   delay(100);
   // Publish the message
-  client.publish(topic.c_str(), payload);
+  bool success = client.publish(topic.c_str(), payload);
   //Wait for message to be sent
   delay(100);
+  return success;
 }
+
 void setup() {
   Serial.begin(115200);
   pinMode(HUMIDITY_PIN, INPUT);
@@ -205,10 +262,11 @@ void setup() {
   Serial.println(jsonString);
 
   //Publish
+  resendStoredData();
   Publish(SensorTopic, jsonString.c_str());
 
   //Go to sleep
-  GoSleep(LONG_SLEEP_DURATION);
+  GoSleep(COMPLETED);
 }
 
 void loop() {
