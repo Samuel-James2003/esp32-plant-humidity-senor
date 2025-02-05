@@ -96,8 +96,8 @@ batteryStatus getBatteryLevel() {
   int percentage = map(voltage, 1500, 3000, 0, 100);
 
   batteryStatus returnValue = {
-    .percentage = constrain(percentage, 0, 100),  // Timeout in milliseconds (240 seconds)
-    .voltage = voltage,                           // Trigger a panic (reset) on timeout
+    .percentage = constrain(percentage, 0, 100),  
+    .voltage = voltage,                   
   };
   // Constrain the result between 0% and 100%
   return returnValue;
