@@ -204,6 +204,10 @@ void GoSleep(bool isComplete) {
     esp_deep_sleep_start();                         // Enter deep sleep
     return;
   }
+  saveDataToFile(CollectData());
+}
+
+String CollectData(){
   SensorData data;
   getBatteryLevel(data);
   getDHTLevels(data);
@@ -217,7 +221,7 @@ void GoSleep(bool isComplete) {
   structToJson(data, doc);
   String jsonString;
   serializeJson(doc, jsonString);
-  saveDataToFile(jsonString);
+  return jsonString;
 }
 
 //Generic MQTT publish function with delay to ensure upload
@@ -236,6 +240,7 @@ bool Publish(String topic, const char* payload) {
 void setup() {
   Serial.begin(115200);
   pinMode(HUMIDITY_PIN, INPUT);
+  pinMode(BATTERY_PIN, INPUT);
 
   connectToWiFi();
   connectToMQTT();
@@ -245,20 +250,8 @@ void setup() {
     // If the ESP32 is booting up (not waking from deep sleep
     Publish(StatusTopic, "esp32-client-online");
   }
-  //Collect data
-  SensorData data;
-  getBatteryLevel(data);
-  getDHTLevels(data);
-  getMoistureLevel(data);
-  getTime(data);
 
-  // Create a JSON document
-  StaticJsonDocument<200> doc;
-
-  // Convert struct to JSON
-  structToJson(data, doc);
-  String jsonString;
-  serializeJson(doc, jsonString);
+  String jsonString = CollectData();
   Serial.println(jsonString);
 
   //Publish
