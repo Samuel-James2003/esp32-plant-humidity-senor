@@ -9,6 +9,7 @@
 // MQTT Information
 const char* StatusTopic = "home/ESP32/Status";
 const char* SensorTopic = "home/ESP32/Sensor";
+const char* DebugTopic = "home/ESP32/Debug";
 const int mqtt_port = 1883;
 
 //Structures
@@ -30,8 +31,8 @@ struct SensorData {
 #define COMPLETED true
 #define FAILED false
 
-// Sleep duration (in microseconds)
-const uint64_t SLEEP_DURATION = 36e8;   // 1 hour
+
+const uint64_t SLEEP_DURATION = 5e6;//36e8;   //Sleep duration (in microseconds) 1 hour
 const int MAX_ATTEMPTS = 50;
 const int MAX_DELAY = 2000;
 
@@ -117,20 +118,26 @@ void getMoistureLevel(SensorData& data) {
   const int WaterValue = 1420;
   int averageValue = getSensorInfo(HUMIDITY_PIN);
   int moistureLevel = map(averageValue, WaterValue, AirValue, 0, AirValue - WaterValue);
-  moistureLevel = constrain(moistureLevel, 0, AirValue - WaterValue);
-  data.soil_humidity = moistureLevel;
+  data.soil_humidity = constrain(moistureLevel, 0, AirValue - WaterValue);
 }
 
 void getDHTLevels(SensorData& data) {
-  DHT dht(DHT_PIN, DHTTYPE);
-  dht.begin();
-  float airHumidity = dht.readHumidity();
-  // Read temperature as Celsius (the default)
-  float tempreture = dht.readTemperature();
-  float heatIndex = dht.computeHeatIndex(tempreture, airHumidity, false);
-  data.heat_index = heatIndex;
-  data.air_humidity = airHumidity;
-  data.temperature = tempreture;
+    DHT dht(DHT_PIN, DHTTYPE);
+    dht.begin();
+    float airHumidity;
+    float temperature;
+    
+    // Keep reading until we get valid values
+    do {
+        airHumidity = dht.readHumidity();
+        temperature = dht.readTemperature();
+    } while (isnan(airHumidity) || isnan(temperature));
+    
+    float heatIndex = dht.computeHeatIndex(temperature, airHumidity, false);
+    
+    data.heat_index = heatIndex;
+    data.air_humidity = airHumidity;
+    data.temperature = temperature;
 }
 
 int getSensorInfo(int pinNumber) {
@@ -250,7 +257,6 @@ void setup() {
     // If the ESP32 is booting up (not waking from deep sleep
     Publish(StatusTopic, "esp32-client-online");
   }
-
   String jsonString = CollectData();
   Serial.println(jsonString);
 

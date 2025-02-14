@@ -1,116 +1,284 @@
 #include "../config.h"
+#include <DHT.h>
+#include <ArduinoJson.h>
 #include <WiFi.h>
 #include <PubSubClient.h>
+#include "SPIFFS.h"
+#include <time.h>
 
-// MQTT Broker
-const char* StatusTopic = "debug/ESP32/Status";
-const char* HumidityTopic = "debug/ESP32/Humidity";
+// MQTT Information
+const char* StatusTopic = "home/ESP32/Status";
+const char* SensorTopic = "home/ESP32/Sensor";
+const char* DebugTopic = "home/ESP32/Debug";
 const int mqtt_port = 1883;
 
-// Humidity sensor pin
-#define POWER_PIN 4
-#define MQTT_PIN 3
-#define HUMIDITY_PIN 2
-#define WIFI_PIN 1
-#define HUMIDITY_OUT_PIN 0
+//Structures
+struct SensorData {
+  float temperature;
+  float heat_index;
+  float air_humidity;
+  int battery;
+  int soil_humidity;
+  char timestamp[30];
 
-// Sleep duration (in microseconds)
-const uint64_t SHORT_SLEEP_DURATION = 10e6; // 10 seconds
-const uint64_t LONG_SLEEP_DURATION = 36e8;  // 1 hour
+  float voltage;
+  int soil_value;
+  int battery_value;
+};
+
+const int MAX_ATTEMPTS = 50;
+const int MAX_DELAY = 2000;
+
+// Definitions
+#define HUMIDITY_PIN 0
+#define DHT_PIN 1
+#define BATTERY_PIN 3
+#define DHTTYPE DHT22
+#define TIMEZONE "EST5EDT,M3.2.0,M11.1.0"
+#define COMPLETED true
+#define FAILED false
 
 WiFiClient espClient;
 PubSubClient client(espClient);
 
+long min(long a, long b) {
+  return (a < b) ? a : b;
+}
+
 // Function to connect to WiFi
 void connectToWiFi() {
-  Serial.println("Connecting to WiFi...");
+  WiFi.disconnect();
   WiFi.begin(ssid, password);
+  byte retryCount = 0;               // Retry counter stored locally
+  unsigned long delayDuration = 10;  // Initial delay duration in milliseconds
+
   while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
+    delay(delayDuration);
+
+    // Increment retry count
+    retryCount++;
+
+    // Exponential backoff with cap
+    delayDuration = min(delayDuration * 2, MAX_DELAY);  // Cap the delay at MAX_DELAY
+
+    // Check if max retries are reached
+    if (retryCount > MAX_ATTEMPTS) {
+      GoSleep(FAILED);
+      return;
+    }
   }
-  Serial.println("\nConnected to WiFi.");
-  digitalWrite(WIFI_PIN,HIGH);
 }
 
 // Function to connect to MQTT broker
 void connectToMQTT() {
-  byte maxAttempts = 0;
+  client.disconnect();
   client.setServer(mqtt_broker, mqtt_port);
+  byte retryCount = 0;               // Retry counter stored locally
+  unsigned long delayDuration = 10;  // Initial delay duration in milliseconds
+
   while (!client.connected()) {
-    Serial.println("Connecting to MQTT...");
     if (client.connect("ESP32Client", mqtt_username, mqtt_password)) {
-      Serial.println("Connected to MQTT broker.");
-    } else if (maxAttempts > 50) {
-      Serial.println("Max tries reached");
-      GoSleep(SHORT_SLEEP_DURATION);
-    } else if (client.state() == -2) {
-      maxAttempts++;
-      Serial.println("State -2");
-      delay(10);
-    } else {
-      maxAttempts++;
-      Serial.print("Failed to connect, state: ");
-      Serial.println(client.state());
-      delay(2000);
+      return;
+    }
+
+    // Increment the retry count
+    retryCount++;
+
+    // If max retries reached, go to sleep
+    if (retryCount > MAX_ATTEMPTS) {
+      GoSleep(FAILED);
+      return;
+    }
+
+    // Exponential backoff with delay cap
+    delay(delayDuration);
+    if (delayDuration < MAX_DELAY) {
+      delayDuration *= 2;  // Double the delay duration
+      if (delayDuration > MAX_DELAY) {
+        delayDuration = MAX_DELAY;  // Cap the delay at 2000ms
+      }
     }
   }
-  digitalWrite(MQTT_PIN, HIGH);
 }
 
-String getMoistureLevel() {
-  int value = analogRead(HUMIDITY_PIN);
-  if (value < WaterValue)
-    return "0";
-  else if (value > AirValue)
-    return String(AirValue - WaterValue);
 
-  return String(value - WaterValue);
+void getTime(SensorData& data) {
+  configTime(0, 0, "pool.ntp.org", "time.nist.gov");
+  setenv("TZ", TIMEZONE, 1);
+  tzset();
+  struct tm timeinfo;
+  getLocalTime(&timeinfo);
+  char buffer[30];
+  strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", &timeinfo);
+  strcpy(data.timestamp, buffer);
 }
 
+// Function to read the moisture level
+void getMoistureLevel(SensorData& data) {
+  // ADC calibration values
+  const int AirValue = 3100;
+  const int WaterValue = 1220;
+  int averageValue = getSensorInfo(HUMIDITY_PIN);
+  int moistureLevel = map(averageValue, WaterValue, AirValue, 0, AirValue - WaterValue);
+  data.soil_value = moistureLevel;
+  data.soil_humidity = moistureLevel;
+}
+
+void getDHTLevels(SensorData& data) {
+  DHT dht(DHT_PIN, DHTTYPE);
+  dht.begin();
+  float airHumidity;
+  float temperature;
+
+  // Keep reading until we get valid values
+  do {
+    airHumidity = dht.readHumidity();
+    temperature = dht.readTemperature();
+  } while (isnan(airHumidity) || isnan(temperature));
+
+  float heatIndex = dht.computeHeatIndex(temperature, airHumidity, false);
+
+  data.heat_index = heatIndex;
+  data.air_humidity = airHumidity;
+  data.temperature = temperature;
+}
+
+int getSensorInfo(int pinNumber) {
+  int totalValue = 0;
+  const int numReadings = 10;
+
+  for (int i = 0; i < numReadings; i++) {
+    totalValue += analogRead(pinNumber);
+    delay(10);  // Small delay between readings
+  }
+
+  return totalValue / numReadings;
+}
+
+void getBatteryLevel(SensorData& data) {
+  int value = getSensorInfo(BATTERY_PIN);
+  data.battery_value = value;
+  float voltage = (value / 4095.0) * 3300;  // Convert ADC value to millivolts (assuming 3.3V reference)
+  // Scale voltage to a percentage between 3000mV and 1500mV
+  int percentage = map(voltage, 1500, 3000, 0, 100);
+  data.battery = constrain(percentage, 0, 100);
+  data.voltage = voltage;
+}
+
+void structToJson(const SensorData& data, JsonDocument& doc) {
+  doc["temperature"] = data.temperature;
+  doc["air_humidity"] = data.air_humidity;
+  doc["battery"] = data.battery;
+  doc["soil_humidity"] = data.soil_humidity;
+  doc["timestamp"] = data.timestamp;
+  doc["heat_index"] = data.heat_index;
+
+  doc["voltage"] = data.voltage;
+  doc["soil_value"] = data.soil_value;
+  doc["battery_value"] = data.battery_value;
+}
+
+void resendStoredData() {
+  if (!client.connected()) return;
+
+  File file = SPIFFS.open("/sensor_data.json", "r");
+  if (!file) {
+    Serial.println("No stored data found");
+    return;
+  }
+
+  while (file.available()) {
+    String line = file.readStringUntil('\n');
+    line.trim();
+    // Publish the line as a JSON string
+    if (!Publish(SensorTopic, line.c_str())) break;
+  }
+  file.close();
+
+  // Clear the file after successful transmission
+  SPIFFS.remove("/sensor_data.json");
+}
+
+void saveDataToFile(String jsonData) {
+  // Open the file for appending data
+  File file = SPIFFS.open("/sensor_data.json", "a");  // Open in append mode
+  if (!file) {
+    return;
+  }
+
+  // Write JSON data to file
+  file.println(jsonData);
+  file.close();
+
+  Serial.println("Data saved to SPIFFS");
+}
+
+//Put the esp32 in sleep mode
+void GoSleep(bool isComplete) {
+  if (isComplete) {
+    delay(500);
+    ESP.restart();
+  }
+  saveDataToFile(CollectData());
+}
+
+String CollectData() {
+  SensorData data;
+  getBatteryLevel(data);
+  getDHTLevels(data);
+  getMoistureLevel(data);
+  getTime(data);
+
+  // Create a JSON document
+  StaticJsonDocument<200> doc;
+
+  // Convert struct to JSON
+  structToJson(data, doc);
+  String jsonString;
+  serializeJson(doc, jsonString);
+  return jsonString;
+}
+
+//Generic MQTT publish function with delay to ensure upload
+bool Publish(String topic, const char* payload) {
+  // Append the MAC address to the topic
+  topic += "/";
+  topic += WiFi.macAddress();
+  delay(100);
+  // Publish the message
+  bool success = client.publish(topic.c_str(), payload);
+  //Wait for message to be sent
+  delay(100);
+  return success;
+}
 
 void setup() {
   Serial.begin(115200);
-    pinMode(HUMIDITY_PIN, INPUT);
-  String moistureLevel = getMoistureLevel();
-  pinMode(WIFI_PIN, OUTPUT);
-  pinMode(MQTT_PIN, OUTPUT);
-  pinMode(POWER_PIN, OUTPUT);
-  digitalWrite(POWER_PIN,HIGH);
-
+  pinMode(HUMIDITY_PIN, INPUT);
+  pinMode(BATTERY_PIN, INPUT);
 
   connectToWiFi();
   connectToMQTT();
 
   // Check the reset reason to determine if this is the first setup
   if (esp_reset_reason() == ESP_RST_POWERON) {
-    // If the ESP32 is booting up (not waking from deep sleep)
-    Serial.println("Setting status to online...");
+    // If the ESP32 is booting up (not waking from deep sleep
     Publish(StatusTopic, "esp32-client-online");
   }
-  delay(10);
-  Publish(HumidityTopic, "Testing");
-  delay(10);
+  String jsonString = CollectData();
+  Serial.println(jsonString);
 
-  GoSleep(SHORT_SLEEP_DURATION);
+  //Publish
+  resendStoredData();
+  Publish(SensorTopic, jsonString.c_str());
 }
-//Put the esp32 in sleep mode
-void GoSleep(uint64_t SLEEP_DURATION) {
-  esp_sleep_enable_timer_wakeup(SLEEP_DURATION);  // Set the wake-up timer
-  esp_deep_sleep_start();                         // Enter deep sleep
-  Serial.println("Going to sleep...");
-}
-//Generic MQTT publish function with delay to ensure upload
-void Publish(String topic, const char* payload) {
-  // Append the MAC address to the topic
-  topic += "/";
-  topic += WiFi.macAddress();
-  delay(10);
-  // Publish the message
-  client.publish(topic.c_str(), payload);
-  //Wait for message to be sent
-  delay(10);
-}
+
 void loop() {
-  // Nothing needed in the loop since we're using deep sleep
+  String jsonString = CollectData();
+  Serial.println(jsonString);
+
+  //Publish
+  resendStoredData();
+  Publish(SensorTopic, jsonString.c_str());
+  delay(500);
 }

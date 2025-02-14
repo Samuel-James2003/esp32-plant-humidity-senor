@@ -86,7 +86,7 @@ void connectToMQTT() {
 int getMoistureLevel() {
   // ADC calibration values
   const int AirValue = 3100;
-  const int WaterValue = 1420;
+  const int WaterValue = 1220;
   int intervals = (AirValue - WaterValue) / 3;
 
   int totalValue = 0;
@@ -98,13 +98,7 @@ int getMoistureLevel() {
   }
 
   int averageValue = totalValue / numReadings;
-
-  if (averageValue < WaterValue)
-    return 0;
-  else if (averageValue > AirValue)
-    return AirValue - WaterValue;
-
-  return averageValue - WaterValue;
+  return map(averageValue, WaterValue, AirValue, 0, AirValue - WaterValue);
 }
 
 //Put the esp32 in sleep mode
