@@ -15,7 +15,7 @@ struct SensorData {
   float temperature;
   float heat_index;
   float air_humidity;
-  int battery;
+  //int battery;
   int soil_humidity;
   char timestamp[30];
 };
@@ -23,7 +23,7 @@ struct SensorData {
 // Definitions
 #define HUMIDITY_PIN 0
 #define DHT_PIN 1
-#define BATTERY_PIN 2
+//#define BATTERY_PIN 2
 #define DHTTYPE DHT22
 #define TIMEZONE "EST5EDT,M3.2.0,M11.1.0"
 #define COMPLETED true
@@ -113,10 +113,10 @@ void getTime(SensorData& data) {
 void getMoistureLevel(SensorData& data) {
   // ADC calibration values
   const int AirValue = 3100;
-  const int WaterValue = 1420;
+  const int WaterValue = 1220;
   int averageValue = getSensorInfo(HUMIDITY_PIN);
   int moistureLevel = map(averageValue, WaterValue, AirValue, 0, AirValue - WaterValue);
-  moistureLevel = constrain(moistureLevel, 0, AirValue - WaterValue);
+  //moistureLevel = constrain(moistureLevel, 0, AirValue - WaterValue);
   data.soil_humidity = moistureLevel;
 }
 
@@ -144,24 +144,26 @@ int getSensorInfo(int pinNumber) {
   return totalValue / numReadings;
 }
 
-void getBatteryLevel(SensorData& data) {
-  int value = getSensorInfo(BATTERY_PIN);
-  float voltage = (value / 4095.0) * 3300;  // Convert ADC value to millivolts (assuming 3.3V reference)
-  // Scale voltage to a percentage between 3000mV and 1500mV
-  int percentage = map(voltage, 1500, 3000, 0, 100);
-  data.battery = constrain(percentage, 0, 100);
-}
+// void getBatteryLevel(SensorData& data) {
+//   int value = getSensorInfo(BATTERY_PIN);
+//   float voltage = (value / 4095.0) * 3300;  // Convert ADC value to millivolts (assuming 3.3V reference)
+//   // Scale voltage to a percentage between 3000mV and 1500mV
+//   int percentage = map(voltage, 1500, 3000, 0, 100);
+//   data.battery = constrain(percentage, 0, 100);
+// }
 
+// converts the structure to the json document
 void structToJson(const SensorData& data, JsonDocument& doc) {
   doc["temperature"] = data.temperature;
   doc["air_humidity"] = data.air_humidity;
-  doc["battery"] = data.battery;
+  //doc["battery"] = data.battery;
   doc["soil_humidity"] = data.soil_humidity;
   doc["timestamp"] = data.timestamp;
   doc["heat_index"] = data.heat_index;
 }
 //Put the esp32 in sleep mode
 void GoSleep(uint64_t SLEEP_DURATION) {
+  delay(MAX_DELAY);  // Delay to ensure the all tasks are finished
   esp_sleep_enable_timer_wakeup(SLEEP_DURATION);  // Set the wake-up timer
   esp_deep_sleep_start();                         // Enter deep sleep
 }
@@ -190,22 +192,28 @@ void setup() {
   }
   //Collect data
   SensorData data;
-  getBatteryLevel(data);
+  //getBatteryLevel(data);
   getDHTLevels(data);
+  Publish(StatusTopic, "dht collected");
   getMoistureLevel(data);
+  Publish(StatusTopic, "moisture collected");
   getTime(data);
+  Publish(StatusTopic, "time collected");
 
   // Create a JSON document
   StaticJsonDocument<200> doc;
-
+  Publish(StatusTopic, "json created");
   // Convert struct to JSON
   structToJson(data, doc);
+  Publish(StatusTopic, "json converted");
   String jsonString;
   serializeJson(doc, jsonString);
+  Publish(StatusTopic, "serialised");
   Serial.println(jsonString);
 
   //Publish
   Publish(SensorTopic, jsonString.c_str());
+  Publish(StatusTopic, "json published");
 
   //Go to sleep
   GoSleep(LONG_SLEEP_DURATION);
