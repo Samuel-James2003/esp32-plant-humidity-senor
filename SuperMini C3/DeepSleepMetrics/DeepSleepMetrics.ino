@@ -183,37 +183,32 @@ void setup() {
   pinMode(HUMIDITY_PIN, INPUT);
 
   connectToWiFi();
-  connectToMQTT();
-
-  // Check the reset reason to determine if this is the first setup
-  if (esp_reset_reason() == ESP_RST_POWERON) {
-    // If the ESP32 is booting up (not waking from deep sleep
-    Publish(StatusTopic, "esp32-client-online");
-  }
   //Collect data
   SensorData data;
-  //getBatteryLevel(data);
-  getDHTLevels(data);
-  Publish(StatusTopic, "dht collected");
-  getMoistureLevel(data);
-  Publish(StatusTopic, "moisture collected");
   getTime(data);
-  Publish(StatusTopic, "time collected");
+  connectToMQTT();
+  Publish(StatusTopic, "Status: Time collected");
+  //getBatteryLevel(data);
+  //Publish(StatusTopic, "Status: Battery level collected");
+  getDHTLevels(data);
+  Publish(StatusTopic, "Status: DHT data collected");
+  getMoistureLevel(data);
+  Publish(StatusTopic, "Status: Moisture data collected");
 
   // Create a JSON document
   StaticJsonDocument<200> doc;
-  Publish(StatusTopic, "json created");
+  Publish(StatusTopic, "Status: JSON document created");
   // Convert struct to JSON
   structToJson(data, doc);
-  Publish(StatusTopic, "json converted");
+  Publish(StatusTopic, "Status: Data converted to JSON");
   String jsonString;
   serializeJson(doc, jsonString);
-  Publish(StatusTopic, "serialised");
+  Publish(StatusTopic, "Status: JSON serialized");
   Serial.println(jsonString);
 
-  //Publish
+  // Publish
   Publish(SensorTopic, jsonString.c_str());
-  Publish(StatusTopic, "json published");
+  Publish(StatusTopic, "Status: JSON published");
 
   //Go to sleep
   GoSleep(LONG_SLEEP_DURATION);
